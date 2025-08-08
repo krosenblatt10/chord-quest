@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Chord Quest</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Chord Quest">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    :root { --bg:#0c0f14; --card:#171c24; --text:#e9eef7; --muted:#9eb0cc; --accent:#5cc8ff; --good:#77e49b; --warn:#ffd36a; }
+    *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);}
+    header{position:sticky;top:0;background:linear-gradient(180deg,#0c0f14,#0c0f1400);padding:16px 16px 8px;backdrop-filter: blur(6px)}
+    h1{margin:0;font-size:22px}
+    #app{padding:12px;max-width:900px;margin:0 auto}
+    .card{background:var(--card);border-radius:14px;padding:14px;margin:10px 0;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    button{appearance:none;border:none;border-radius:12px;padding:12px 14px;background:#1f2733;color:var(--text);font-weight:600}
+    button.primary{background:var(--accent);color:#001629}
+    button.good{background:var(--good);color:#002915}
+    button.warn{background:var(--warn);color:#392a00}
+    .pill{padding:6px 10px;border-radius:999px;background:#202b38;color:var(--muted);font-size:12px}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+    .tiny{font-size:12px;color:var(--muted)}
+    .progress{height:8px;background:#0f1420;border-radius:999px;overflow:hidden}
+    .progress-inner{height:100%;background:var(--accent);width:0%}
+    label{display:block;margin:6px 0 4px}
+    input[type=range]{width:100%}
+    .toggle{display:flex;align-items:center;gap:8px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎹 Chord Quest</h1>
+    <div class="tiny">A tiny chord game for adults learning piano</div>
+  </header>
+  <div id="app">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div>
+          <div>Level: <span id="levelName">The Three Towers</span></div>
+          <div class="tiny">Points: <span id="points">0</span></div>
+        </div>
+        <div class="pill">Metronome: <span id="bpmLabel">60</span> bpm</div>
+      </div>
+      <div class="progress" aria-label="Level progress">
+        <div id="progress" class="progress-inner"></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="primary" id="btnStartQuest">Start Daily Quest</button>
+        <button id="btnRandomize">Shuffle Challenge</button>
+        <button id="btnMute">Mute</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🎯 Current Quest</h3>
+      <div id="questText">Press "Start Daily Quest" to begin.</div>
+      <div class="row" style="margin-top:10px">
+        <button class="good" id="btnSuccess">I did it ✅</button>
+        <button class="warn" id="btnSkip">Skip ❌</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🧩 Chord Buttons</h3>
+      <div class="grid" id="chordGrid"></div>
+      <div class="toggle" style="margin-top:10px">
+        <input type="checkbox" id="voiceLeading" checked>
+        <label for="voiceLeading">Use smooth voice-leading inversions</label>
+      </div>
+      <label for="bpm">Metronome</label>
+      <input id="bpm" type="range" min="40" max="140" value="60">
+      <div class="row">
+        <button id="btnClick">Metronome Tick</button>
+        <button id="btn4">Count 4</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>📚 Levels</h3>
+      <ol id="levelsList" class="tiny"></ol>
+    </div>
+
+    <div class="footer">Tip: Add to Home Screen in Safari for an app-like experience.</div>
+  </div>
+
+<script>
+const state = JSON.parse(localStorage.getItem('cq_state')||'{}');
+state.points = state.points||0;
+state.level = state.level||0;
+state.muted = state.muted||false;
+
+const LEVELS = [
+  {name:"The Three Towers", chords:["C","F","G"], desc:"Play each major chord 5x in root position."},
+  {name:"The Castle of Minors", chords:["Am","Dm","Em"], desc:"C→Am, F→Dm, G→Em without stopping."},
+  {name:"The Bridge of Inversions", chords:["C/F/G inversions"], desc:"Play C→F→G with minimal movement."},
+  {name:"The Rhythm Forest", chords:["Patterns"], desc:"Use 'bass+chord' or 'chop-chop-pause' on any 4-chord song."},
+  {name:"The Songmaker’s Workshop", chords:["Progressions"], desc:"Play I–V–vi–IV (C–G–Am–F). Then improvise."}
+];
+const QUESTS = [
+  {text:"Play C five times. Close your eyes on #5.", chords:["C"], reps:5},
+  {text:"Play F five times. Land without looking on #5.", chords:["F"], reps:5},
+  {text:"Play G five times. Count 1-2-3-4.", chords:["G"], reps:5},
+  {text:"Transition C→Am three times smoothly.", chords:["C","Am"], reps:3},
+  {text:"Transition F→Dm three times smoothly.", chords:["F","Dm"], reps:3},
+  {text:"Transition G→Em three times smoothly.", chords:["G","Em"], reps:3},
+  {text:"Play C→F→G using the closest inversions.", chords:["C","F","G"], reps:4},
+  {text:"Play C→G→Am→F with a steady groove.", chords:["C","G","Am","F"], reps:4},
+  {text:"Improvise a right-hand melody over C→Am→F→G.", chords:["C","Am","F","G"], reps:4}
+];
+
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+const ctx = new AudioCtx();
+
+function noteFreq(note) {
+  const map = {'C':261.63,'C#':277.18,'Db':277.18,'D':293.66,'D#':311.13,'Eb':311.13,'E':329.63,
+    'F':349.23,'F#':369.99,'Gb':369.99,'G':392.00,'G#':415.30,'Ab':415.30,'A':440.00,'A#':466.16,'Bb':466.16,'B':493.88};
+  return map[note];
+}
+
+function buildChord(name, inversion=0){
+  const triads = {'C':['C','E','G'],'F':['F','A','C'],'G':['G','B','D'],'Am':['A','C','E'],'Dm':['D','F','A'],'Em':['E','G','B']};
+  const t = triads[name]; if(!t) return [];
+  let notes = t.slice();
+  for(let i=0;i<inversion;i++){ const n = notes.shift(); notes.push(n); }
+  return notes;
+}
+
+function closestInversion(prev, target){
+  const invs = [0,1,2]; let best = 0, bestScore = 1e9;
+  for(const inv of invs){
+    const chord = buildChord(target, inv); let score = 0;
+    for(let i=0;i<chord.length;i++){
+      const a = chord[i], b = prev[i]||chord[i];
+      score += Math.abs(noteFreq(a)-noteFreq(b));
+    }
+    if(score < bestScore){ bestScore=score; best=inv; }
+  }
+  return best;
+}
+
+function playChord(name, opts={}){
+  if(state.muted) return;
+  const now = ctx.currentTime + 0.01, dur = opts.dur||0.9;
+  const gain = ctx.createGain(); gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.6, now+0.03);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now+dur);
+
+  let inversion = opts.inversion||0;
+  if(opts.smooth && opts.prevChord){ inversion = closestInversion(opts.prevChord, name); }
+  const notes = buildChord(name, inversion);
+  notes.forEach((n,i)=>{
+    const o = ctx.createOscillator();
+    o.type = ['triangle','sine','square'][i%3];
+    o.frequency.setValueAtTime(noteFreq(n), now);
+    o.connect(gain); o.start(now); o.stop(now+dur);
+  });
+  return notes;
+}
+
+// Metronome
+function click(){
+  if(state.muted) return;
+  const t = ctx.currentTime + 0.005;
+  const o = ctx.createOscillator(); const g = ctx.createGain();
+  o.type = 'square'; o.frequency.setValueAtTime(1000,t);
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(0.4,t+0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+0.06);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(t); o.stop(t+0.08);
+}
+let metroTimer=null;
+function startCount(beats=4){
+  const bpm = parseInt(document.getElementById('bpm').value,10);
+  const interval = 60000/bpm; let count = 0;
+  clearInterval(metroTimer);
+  metroTimer = setInterval(()=>{ click(); if(++count>=beats){ clearInterval(metroTimer); } }, interval);
+}
+
+const pointsEl = document.getElementById('points');
+const levelNameEl = document.getElementById('levelName');
+const progressEl = document.getElementById('progress');
+const questTextEl = document.getElementById('questText');
+const levelsListEl = document.getElementById('levelsList');
+const bpmInput = document.getElementById('bpm');
+const bpmLabel = document.getElementById('bpmLabel');
+
+const CHORDS = ["C","F","G","Am","Dm","Em"];
+let prevNotes = null;
+
+function refreshGrid(){
+  const grid = document.getElementById('chordGrid'); grid.innerHTML = "";
+  CHORDS.forEach(name=>{
+    const btn = document.createElement('button'); btn.textContent = name;
+    btn.onclick = ()=>{
+      const useSmooth = document.getElementById('voiceLeading').checked;
+      const notes = playChord(name,{smooth:useSmooth, prevChord:prevNotes});
+      prevNotes = notes;
+    };
+    grid.appendChild(btn);
+  });
+}
+
+function renderLevel(){
+  levelNameEl.textContent = LEVELS[state.level]?.name || "Free Play";
+  pointsEl.textContent = state.points;
+  progressEl.style.width = Math.min((state.points%50)/50*100,100)+"%";
+  levelsListEl.innerHTML = "";
+  LEVELS.forEach((L,i)=>{
+    const li = document.createElement('li');
+    li.textContent = `${i===state.level?"➡️ ":""}${L.name} — ${L.chords.join(", ")} — ${L.desc}`;
+    levelsListEl.appendChild(li);
+  });
+  localStorage.setItem('cq_state', JSON.stringify(state));
+}
+
+let currentQuestIndex = state.questIndex || 0;
+function setQuest(i){
+  currentQuestIndex = i % QUESTS.length; state.questIndex = currentQuestIndex;
+  const Q = QUESTS[currentQuestIndex];
+  questTextEl.textContent = Q.text + (Q.reps? ` (${Q.reps} reps)`:"");
+  renderLevel();
+}
+function startDaily(){ setQuest((currentQuestIndex+1)%QUESTS.length); }
+
+document.getElementById('btnStartQuest').onclick = startDaily;
+document.getElementById('btnRandomize').onclick = ()=> setQuest(Math.floor(Math.random()*QUESTS.length));
+document.getElementById('btnSuccess').onclick = ()=>{
+  state.points += 5; if(state.points % 50 === 0){ state.level = Math.min(state.level+1, LEVELS.length-1); }
+  renderLevel();
+};
+document.getElementById('btnSkip').onclick = ()=> setQuest((currentQuestIndex+1)%QUESTS.length);
+document.getElementById('btnMute').onclick = ()=>{
+  state.muted = !state.muted; document.getElementById('btnMute').textContent = state.muted? "Unmute" : "Mute";
+};
+document.getElementById('btnClick').onclick = ()=> click();
+document.getElementById('btn4').onclick = ()=> startCount(4);
+bpmInput.addEventListener('input', ()=> bpmLabel.textContent = bpmInput.value);
+bpmLabel.textContent = bpmInput.value; refreshGrid(); renderLevel(); setQuest(currentQuestIndex);
+
+if('serviceWorker' in navigator){ window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js'); }); }
+</script>
+</body>
+</html>
+
